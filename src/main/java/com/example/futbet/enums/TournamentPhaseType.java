@@ -1,8 +1,7 @@
 package com.example.futbet.enums;
 
-public enum TournamentType {
+public enum TournamentPhaseType {
     ROUND_ROBIN,
     KNOCKOUT,
-    GROUPS,
-    GROUPS_KNOCKOUT
+    GROUPS
 }

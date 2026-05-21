@@ -7,10 +7,11 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.OneToOne;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,41 +19,36 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
-@Table(name = "tournament_settings")
+@Table(
+        name = "phase_groups",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"phase_id", "position"})
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TournamentSettings {
+public class PhaseGroup {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tournament_id", nullable = false, unique = true)
-    private Tournament tournament;
+    @Column(name = "public_id", nullable = false, unique = true, updatable = false)
+    private UUID publicId;
 
-    @Column(name = "win_points", nullable = false)
-    private int winPoints;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "phase_id", nullable = false, updatable = false)
+    private TournamentPhase phase;
 
-    @Column(name = "draw_points", nullable = false)
-    private int drawPoints;
+    @Column(nullable = false, length = 40)
+    private String name;
 
-    @Column(name = "loss_points", nullable = false)
-    private int lossPoints;
-
-    @Column(name = "exact_score_points", nullable = false)
-    private int exactScorePoints;
-
-    @Column(name = "winner_points", nullable = false)
-    private int winnerPoints;
-
-    @Column(name = "wrong_points", nullable = false)
-    private int wrongPoints;
+    @Column(nullable = false)
+    private int position;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -62,6 +58,9 @@ public class TournamentSettings {
 
     @PrePersist
     void onCreate() {
+        if (publicId == null) {
+            publicId = UUID.randomUUID();
+        }
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;

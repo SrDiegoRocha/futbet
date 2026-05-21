@@ -73,7 +73,6 @@ public class TournamentService {
                 .name(request.name().trim())
                 .description(trimOrNull(request.description()))
                 .privacy(request.privacy())
-                .type(request.type())
                 .status(TournamentStatus.DRAFT)
                 .maxParticipants(request.maxParticipants())
                 .maxTeams(request.maxTeams())
@@ -151,12 +150,7 @@ public class TournamentService {
             throw new TournamentNotEditableException(status, "tournament is finished");
         }
 
-        boolean typeChanged = tournament.getType() != request.type();
         boolean privacyChanged = tournament.getPrivacy() != request.privacy();
-
-        if (status != TournamentStatus.DRAFT && typeChanged) {
-            throw new TournamentNotEditableException(status, "type can only be changed in DRAFT");
-        }
         if (status == TournamentStatus.IN_PROGRESS && privacyChanged) {
             throw new TournamentNotEditableException(status, "privacy is locked once tournament is in progress");
         }
@@ -164,7 +158,6 @@ public class TournamentService {
         tournament.setName(request.name().trim());
         tournament.setDescription(trimOrNull(request.description()));
         tournament.setPrivacy(request.privacy());
-        tournament.setType(request.type());
 
         validateCapacity(tournament, request.maxParticipants(), request.maxTeams());
         tournament.setMaxParticipants(request.maxParticipants());
@@ -236,11 +229,6 @@ public class TournamentService {
                 .exactScorePoints(payload.exactScorePoints())
                 .winnerPoints(payload.winnerPoints())
                 .wrongPoints(payload.wrongPoints())
-                .groupsCount(payload.groupsCount())
-                .qualifiersPerGroup(payload.qualifiersPerGroup())
-                .playsInsideGroupOnly(payload.playsInsideGroupOnly())
-                .matchGenerationMode(payload.matchGenerationMode())
-                .matchLegMode(payload.matchLegMode())
                 .build();
     }
 
@@ -252,11 +240,6 @@ public class TournamentService {
         settings.setExactScorePoints(payload.exactScorePoints());
         settings.setWinnerPoints(payload.winnerPoints());
         settings.setWrongPoints(payload.wrongPoints());
-        settings.setGroupsCount(payload.groupsCount());
-        settings.setQualifiersPerGroup(payload.qualifiersPerGroup());
-        settings.setPlaysInsideGroupOnly(payload.playsInsideGroupOnly());
-        settings.setMatchGenerationMode(payload.matchGenerationMode());
-        settings.setMatchLegMode(payload.matchLegMode());
     }
 
     private void applyTiebreakCriteria(Tournament tournament, List<TiebreakCriteria> criteria) {

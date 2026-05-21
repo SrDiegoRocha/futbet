@@ -28,7 +28,6 @@ public class TournamentMapper {
                 tournament.getDescription(),
                 tournament.getInviteCode(),
                 tournament.getPrivacy(),
-                tournament.getType(),
                 tournament.getStatus(),
                 tournament.getMaxParticipants(),
                 tournament.getMaxTeams(),
@@ -55,11 +54,6 @@ public class TournamentMapper {
                 settings.getExactScorePoints(),
                 settings.getWinnerPoints(),
                 settings.getWrongPoints(),
-                settings.getGroupsCount(),
-                settings.getQualifiersPerGroup(),
-                settings.getPlaysInsideGroupOnly(),
-                settings.getMatchGenerationMode(),
-                settings.getMatchLegMode(),
                 criteria.stream()
                         .sorted(Comparator.comparingInt(TournamentTiebreakCriterion::getPosition))
                         .map(TournamentTiebreakCriterion::getCriteria)

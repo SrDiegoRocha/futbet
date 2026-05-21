@@ -1,0 +1,228 @@
+package com.example.futbet.service;
+
+import com.example.futbet.dto.request.CreatePhaseRequest;
+import com.example.futbet.dto.request.MovePhaseRequest;
+import com.example.futbet.dto.request.UpdatePhaseRequest;
+import com.example.futbet.dto.response.PhaseResponse;
+import com.example.futbet.entity.PhaseTeam;
+import com.example.futbet.entity.Tournament;
+import com.example.futbet.entity.TournamentPhase;
+import com.example.futbet.entity.TournamentTeam;
+import com.example.futbet.enums.TournamentPhaseType;
+import com.example.futbet.enums.TournamentStatus;
+import com.example.futbet.exception.NotTournamentOwnerException;
+import com.example.futbet.exception.PhaseNotFoundException;
+import com.example.futbet.exception.PhaseStructureLockedException;
+import com.example.futbet.exception.TournamentNotFoundException;
+import com.example.futbet.mapper.PhaseMapper;
+import com.example.futbet.repository.PhaseGroupRepository;
+import com.example.futbet.repository.PhaseTeamRepository;
+import com.example.futbet.repository.TournamentPhaseRepository;
+import com.example.futbet.repository.TournamentRepository;
+import com.example.futbet.repository.TournamentTeamRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+@Service
+public class PhaseService {
+
+    private final TournamentRepository tournamentRepository;
+    private final TournamentPhaseRepository phaseRepository;
+    private final PhaseGroupRepository phaseGroupRepository;
+    private final PhaseTeamRepository phaseTeamRepository;
+    private final TournamentTeamRepository tournamentTeamRepository;
+    private final PhaseMapper phaseMapper;
+
+    public PhaseService(
+            TournamentRepository tournamentRepository,
+            TournamentPhaseRepository phaseRepository,
+            PhaseGroupRepository phaseGroupRepository,
+            PhaseTeamRepository phaseTeamRepository,
+            TournamentTeamRepository tournamentTeamRepository,
+            PhaseMapper phaseMapper
+    ) {
+        this.tournamentRepository = tournamentRepository;
+        this.phaseRepository = phaseRepository;
+        this.phaseGroupRepository = phaseGroupRepository;
+        this.phaseTeamRepository = phaseTeamRepository;
+        this.tournamentTeamRepository = tournamentTeamRepository;
+        this.phaseMapper = phaseMapper;
+    }
+
+    @Transactional
+    public PhaseResponse create(UUID ownerPublicId, UUID tournamentPublicId, CreatePhaseRequest request) {
+        Tournament tournament = loadOwnedEditable(ownerPublicId, tournamentPublicId);
+
+        int position = (int) phaseRepository.countByTournamentId(tournament.getId());
+
+        TournamentPhase phase = TournamentPhase.builder()
+                .tournament(tournament)
+                .name(request.name().trim())
+                .position(position)
+                .phaseType(request.phaseType())
+                .matchLegMode(request.matchLegMode())
+                .matchGenerationMode(request.matchGenerationMode())
+                .qualifiersPerGroup(
+                        request.phaseType() == TournamentPhaseType.GROUPS
+                                ? request.qualifiersPerGroup()
+                                : null
+                )
+                .playsInsideGroupOnly(
+                        request.phaseType() == TournamentPhaseType.GROUPS
+                                ? request.playsInsideGroupOnly()
+                                : null
+                )
+                .build();
+
+        TournamentPhase saved = phaseRepository.save(phase);
+
+        if (position == 0) {
+            autoPopulateFromTournamentTeams(saved);
+        }
+
+        return toResponse(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PhaseResponse> list(UUID ownerPublicId, UUID tournamentPublicId) {
+        loadOwnedOrReader(ownerPublicId, tournamentPublicId);
+        return phaseRepository.findAllByTournamentPublicIdOrderByPositionAsc(tournamentPublicId)
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PhaseResponse getById(UUID ownerPublicId, UUID tournamentPublicId, UUID phasePublicId) {
+        loadOwnedOrReader(ownerPublicId, tournamentPublicId);
+        TournamentPhase phase = phaseRepository
+                .findByPublicIdAndTournamentPublicId(phasePublicId, tournamentPublicId)
+                .orElseThrow(PhaseNotFoundException::new);
+        return toResponse(phase);
+    }
+
+    @Transactional
+    public PhaseResponse update(
+            UUID ownerPublicId,
+            UUID tournamentPublicId,
+            UUID phasePublicId,
+            UpdatePhaseRequest request
+    ) {
+        Tournament tournament = loadOwnedEditable(ownerPublicId, tournamentPublicId);
+        TournamentPhase phase = loadPhase(tournament, phasePublicId);
+
+        phase.setName(request.name().trim());
+        phase.setPhaseType(request.phaseType());
+        phase.setMatchLegMode(request.matchLegMode());
+        phase.setMatchGenerationMode(request.matchGenerationMode());
+        phase.setQualifiersPerGroup(
+                request.phaseType() == TournamentPhaseType.GROUPS
+                        ? request.qualifiersPerGroup()
+                        : null
+        );
+        phase.setPlaysInsideGroupOnly(
+                request.phaseType() == TournamentPhaseType.GROUPS
+                        ? request.playsInsideGroupOnly()
+                        : null
+        );
+
+        return toResponse(phaseRepository.saveAndFlush(phase));
+    }
+
+    @Transactional
+    public PhaseResponse move(
+            UUID ownerPublicId,
+            UUID tournamentPublicId,
+            UUID phasePublicId,
+            MovePhaseRequest request
+    ) {
+        Tournament tournament = loadOwnedEditable(ownerPublicId, tournamentPublicId);
+        TournamentPhase phase = loadPhase(tournament, phasePublicId);
+
+        long total = phaseRepository.countByTournamentId(tournament.getId());
+        int newPosition = Math.min(request.position(), (int) total - 1);
+        int oldPosition = phase.getPosition();
+
+        if (newPosition == oldPosition) {
+            return toResponse(phase);
+        }
+
+        phase.setPosition(-1);
+        phaseRepository.flush();
+
+        if (newPosition < oldPosition) {
+            phaseRepository.shiftPositions(tournament.getId(), newPosition, oldPosition - 1, 1);
+        } else {
+            phaseRepository.shiftPositions(tournament.getId(), oldPosition + 1, newPosition, -1);
+        }
+        phaseRepository.flush();
+
+        phase.setPosition(newPosition);
+        return toResponse(phaseRepository.saveAndFlush(phase));
+    }
+
+    @Transactional
+    public void delete(UUID ownerPublicId, UUID tournamentPublicId, UUID phasePublicId) {
+        Tournament tournament = loadOwnedEditable(ownerPublicId, tournamentPublicId);
+        TournamentPhase phase = loadPhase(tournament, phasePublicId);
+        int removedPosition = phase.getPosition();
+
+        phaseRepository.delete(phase);
+        phaseRepository.flush();
+
+        long total = phaseRepository.countByTournamentId(tournament.getId());
+        if (removedPosition < total) {
+            phaseRepository.shiftPositions(tournament.getId(), removedPosition + 1, (int) total, -1);
+        }
+    }
+
+    Tournament loadOwnedEditable(UUID ownerPublicId, UUID tournamentPublicId) {
+        Tournament tournament = tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId)
+                .orElseThrow(TournamentNotFoundException::new);
+        if (!tournament.getOwner().getPublicId().equals(ownerPublicId)) {
+            throw new NotTournamentOwnerException();
+        }
+        TournamentStatus status = tournament.getStatus();
+        if (status == TournamentStatus.IN_PROGRESS || status == TournamentStatus.FINISHED) {
+            throw new PhaseStructureLockedException(status);
+        }
+        return tournament;
+    }
+
+    Tournament loadOwnedOrReader(UUID requesterPublicId, UUID tournamentPublicId) {
+        return tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId)
+                .orElseThrow(TournamentNotFoundException::new);
+    }
+
+    TournamentPhase loadPhase(Tournament tournament, UUID phasePublicId) {
+        return phaseRepository
+                .findByPublicIdAndTournamentPublicId(phasePublicId, tournament.getPublicId())
+                .orElseThrow(PhaseNotFoundException::new);
+    }
+
+    private void autoPopulateFromTournamentTeams(TournamentPhase phase) {
+        List<TournamentTeam> links = tournamentTeamRepository
+                .findAllByTournamentPublicId(phase.getTournament().getPublicId());
+        if (links.isEmpty()) {
+            return;
+        }
+        List<PhaseTeam> phaseTeams = new ArrayList<>(links.size());
+        for (TournamentTeam link : links) {
+            phaseTeams.add(PhaseTeam.builder()
+                    .phase(phase)
+                    .team(link.getTeam())
+                    .build());
+        }
+        phaseTeamRepository.saveAll(phaseTeams);
+    }
+
+    PhaseResponse toResponse(TournamentPhase phase) {
+        long groupCount = phaseGroupRepository.countByPhaseId(phase.getId());
+        long teamCount = phaseTeamRepository.countByPhaseId(phase.getId());
+        return phaseMapper.toResponse(phase, groupCount, teamCount);
+    }
+}

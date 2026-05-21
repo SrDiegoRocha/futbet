@@ -1,8 +1,8 @@
 package com.example.futbet.entity;
 
-import com.example.futbet.enums.TournamentPrivacy;
-import com.example.futbet.enums.TournamentStatus;
-import jakarta.persistence.CascadeType;
+import com.example.futbet.enums.MatchGenerationMode;
+import com.example.futbet.enums.MatchLegMode;
+import com.example.futbet.enums.TournamentPhaseType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,12 +13,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.OrderBy;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -26,18 +24,19 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tournaments")
+@Table(
+        name = "tournament_phases",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"tournament_id", "position"})
+)
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Tournament {
+public class TournamentPhase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,34 +46,32 @@ public class Tournament {
     private UUID publicId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "owner_id", nullable = false, updatable = false)
-    private User owner;
+    @JoinColumn(name = "tournament_id", nullable = false, updatable = false)
+    private Tournament tournament;
 
-    @Column(nullable = false, length = 80)
+    @Column(nullable = false, length = 60)
     private String name;
 
-    @Column(length = 500)
-    private String description;
-
-    @Column(name = "invite_code", nullable = false, unique = true, length = 8)
-    private String inviteCode;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private TournamentPrivacy privacy;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 15)
-    private TournamentStatus status;
-
-    @Column(name = "max_participants")
-    private Integer maxParticipants;
-
-    @Column(name = "max_teams")
-    private Integer maxTeams;
-
     @Column(nullable = false)
-    private boolean active;
+    private int position;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "phase_type", nullable = false, length = 15)
+    private TournamentPhaseType phaseType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "match_leg_mode", nullable = false, length = 15)
+    private MatchLegMode matchLegMode;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "match_generation_mode", nullable = false, length = 15)
+    private MatchGenerationMode matchGenerationMode;
+
+    @Column(name = "qualifiers_per_group")
+    private Integer qualifiersPerGroup;
+
+    @Column(name = "plays_inside_group_only")
+    private Boolean playsInsideGroupOnly;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -82,26 +79,14 @@ public class Tournament {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @OneToOne(mappedBy = "tournament", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private TournamentSettings settings;
-
-    @OneToMany(mappedBy = "tournament", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @OrderBy("position ASC")
-    @Builder.Default
-    private List<TournamentTiebreakCriterion> tiebreakCriteria = new ArrayList<>();
-
     @PrePersist
     void onCreate() {
         if (publicId == null) {
             publicId = UUID.randomUUID();
         }
-        if (status == null) {
-            status = TournamentStatus.DRAFT;
-        }
         Instant now = Instant.now();
         createdAt = now;
         updatedAt = now;
-        active = true;
     }
 
     @PreUpdate
