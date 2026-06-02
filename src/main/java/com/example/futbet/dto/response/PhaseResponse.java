@@ -14,11 +14,11 @@ public record PhaseResponse(
         TournamentPhaseType phaseType,
         MatchLegMode matchLegMode,
         MatchGenerationMode matchGenerationMode,
-        Integer qualifiersPerGroup,
         Boolean playsInsideGroupOnly,
         boolean hasThirdPlace,
         long groupCount,
         long teamCount,
+        Instant finalizedAt,
         Instant createdAt,
         Instant updatedAt
 ) {

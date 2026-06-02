@@ -13,7 +13,25 @@
       "Bash(echo \"exit=$?\")",
       "Bash(./mvnw.cmd -q -DskipTests spring-boot:run)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/actuator/health)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell($env:JAVA_HOME = 'C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10'; $env:Path = \"$env:JAVA_HOME\\\\bin;$env:Path\"; & .\\\\mvnw.cmd -DskipTests compile 2>&1 | Select-String -Pattern 'BUILD|ERROR|FAIL' | Select-Object -Last 20)",
+      "Bash(./mvnw -q compile)",
+      "Bash(where java *)",
+      "Bash(java -version)",
+      "PowerShell(if \\($env:JAVA_HOME\\) { \"JAVA_HOME=$env:JAVA_HOME\" } else { \"no JAVA_HOME\" }; \\(Get-Command java -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell($dirs = @\\(\"C:\\\\Program Files\\\\Java\",\"C:\\\\Program Files\\\\Eclipse Adoptium\",\"$env:LOCALAPPDATA\\\\Programs\\\\Eclipse Adoptium\",\"C:\\\\Program Files\\\\Microsoft\",\"$env:USERPROFILE\\\\.jdks\"\\); foreach \\($d in $dirs\\) { if \\(Test-Path $d\\) { Get-ChildItem $d -Directory | Select-Object -ExpandProperty FullName } })",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -q -o compile 2>&1 | Select-Object -Last 40)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-Object -Last 6)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; $jar = \"$env:USERPROFILE\\\\.m2\\\\repository\\\\org\\\\springframework\\\\data\\\\spring-data-commons\\\\3.4.0\\\\spring-data-commons-3.4.0.jar\"; & \"$env:JAVA_HOME\\\\bin\\\\jar.exe\" tf $jar | Select-String \"PropertyReferenceException\")",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; $jar = \"$env:USERPROFILE\\\\.m2\\\\repository\\\\org\\\\springframework\\\\data\\\\spring-data-commons\\\\4.0.5\\\\spring-data-commons-4.0.5.jar\"; & \"$env:JAVA_HOME\\\\bin\\\\jar.exe\" tf $jar | Select-String \"PropertyReferenceException\"; \"--- which version on project classpath ---\"; .\\\\mvnw.cmd -o dependency:list 2>&1 | Select-String \"spring-data-commons\")",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o dependency:list 2>&1 | Select-String \"spring-data-commons|spring-data-jpa\")",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o dependency:list 2>&1 | Select-String \"spring-data\" | ForEach-Object { $_.Line })",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-Object -Last 12)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o clean compile 2>&1 | Select-Object -Last 8)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 20)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 25)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o clean compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 25)"
     ]
   }
 }

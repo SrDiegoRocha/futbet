@@ -27,7 +27,13 @@ public record StandingsResponse(
             int goalsFor,
             int goalsAgainst,
             int goalDifference,
-            int points
+            int points,
+            // Desfecho da zona de avanço para esta posição (null se nenhuma zona cobre a posição).
+            UUID zoneId,
+            String zoneName,
+            UUID nextPhaseId,       // destino do avanço; null = zona de descarte/eliminação
+            String nextPhaseName,
+            boolean qualifies       // true se o time avança (resolve BEST_RANKED de forma autoritativa)
     ) {
     }
 }

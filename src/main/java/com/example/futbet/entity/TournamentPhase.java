@@ -67,14 +67,14 @@ public class TournamentPhase {
     @Column(name = "match_generation_mode", nullable = false, length = 15)
     private MatchGenerationMode matchGenerationMode;
 
-    @Column(name = "qualifiers_per_group")
-    private Integer qualifiersPerGroup;
-
     @Column(name = "plays_inside_group_only")
     private Boolean playsInsideGroupOnly;
 
     @Column(name = "has_third_place", nullable = false)
     private boolean hasThirdPlace;
+
+    @Column(name = "finalized_at")
+    private Instant finalizedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

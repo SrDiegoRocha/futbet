@@ -20,6 +20,16 @@ public interface MatchRepository extends JpaRepository<Match, Long> {
 
     List<Match> findAllByPhasePublicId(UUID phasePublicId);
 
+    @Query("""
+            SELECT m FROM Match m
+            JOIN m.phase p
+            WHERE p.tournament.publicId = :tournamentPublicId
+            ORDER BY p.position ASC,
+                     COALESCE(m.scheduledAt, m.createdAt) ASC,
+                     m.createdAt ASC
+            """)
+    List<Match> findAllByTournamentPublicIdOrdered(@Param("tournamentPublicId") UUID tournamentPublicId);
+
     List<Match> findAllByPhasePublicIdAndRound(UUID phasePublicId, int round);
 
     List<Match> findAllByPhasePublicIdAndGroupPublicId(UUID phasePublicId, UUID groupPublicId);

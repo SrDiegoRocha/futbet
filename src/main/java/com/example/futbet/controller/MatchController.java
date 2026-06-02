@@ -65,21 +65,27 @@ public class MatchController {
 
     @GetMapping
     public ResponseEntity<List<MatchResponse>> list(
+            @AuthenticationPrincipal String requesterPublicId,
             @PathVariable UUID tournamentId,
             @PathVariable UUID phaseId,
             @RequestParam(required = false) Integer round,
             @RequestParam(required = false) UUID groupId
     ) {
-        return ResponseEntity.ok(matchService.list(tournamentId, phaseId, round, groupId));
+        return ResponseEntity.ok(
+                matchService.list(UUID.fromString(requesterPublicId), tournamentId, phaseId, round, groupId)
+        );
     }
 
     @GetMapping("/{matchId}")
     public ResponseEntity<MatchResponse> getById(
+            @AuthenticationPrincipal String requesterPublicId,
             @PathVariable UUID tournamentId,
             @PathVariable UUID phaseId,
             @PathVariable UUID matchId
     ) {
-        return ResponseEntity.ok(matchService.getById(tournamentId, phaseId, matchId));
+        return ResponseEntity.ok(
+                matchService.getById(UUID.fromString(requesterPublicId), tournamentId, phaseId, matchId)
+        );
     }
 
     @PutMapping("/{matchId}")

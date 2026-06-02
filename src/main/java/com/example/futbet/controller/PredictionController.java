@@ -2,6 +2,7 @@ package com.example.futbet.controller;
 
 import com.example.futbet.dto.request.PlacePredictionRequest;
 import com.example.futbet.dto.response.PredictionResponse;
+import com.example.futbet.dto.response.PredictionStatsResponse;
 import com.example.futbet.service.PredictionService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -60,6 +62,17 @@ public class PredictionController {
         );
     }
 
+    @GetMapping("/matches/{matchId}/predictions/stats")
+    public ResponseEntity<PredictionStatsResponse> stats(
+            @AuthenticationPrincipal String requesterPublicId,
+            @PathVariable UUID tournamentId,
+            @PathVariable UUID matchId
+    ) {
+        return ResponseEntity.ok(
+                predictionService.stats(UUID.fromString(requesterPublicId), tournamentId, matchId)
+        );
+    }
+
     @GetMapping("/predictions/me")
     public ResponseEntity<List<PredictionResponse>> listMine(
             @AuthenticationPrincipal String userPublicId,
@@ -67,6 +80,19 @@ public class PredictionController {
     ) {
         return ResponseEntity.ok(
                 predictionService.listMine(UUID.fromString(userPublicId), tournamentId)
+        );
+    }
+
+    @GetMapping("/predictions")
+    public ResponseEntity<List<PredictionResponse>> listForUser(
+            @AuthenticationPrincipal String requesterPublicId,
+            @PathVariable UUID tournamentId,
+            @RequestParam UUID userId
+    ) {
+        return ResponseEntity.ok(
+                predictionService.listForUserInTournament(
+                        UUID.fromString(requesterPublicId), tournamentId, userId
+                )
         );
     }
 }

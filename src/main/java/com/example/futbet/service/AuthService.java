@@ -4,12 +4,14 @@ import com.example.futbet.dto.request.RefreshTokenRequest;
 import com.example.futbet.dto.request.SignInRequest;
 import com.example.futbet.dto.request.SignUpRequest;
 import com.example.futbet.dto.response.AuthResponse;
+import com.example.futbet.entity.RevokedToken;
 import com.example.futbet.entity.User;
 import com.example.futbet.enums.Role;
 import com.example.futbet.exception.EmailAlreadyInUseException;
 import com.example.futbet.exception.InvalidCredentialsException;
 import com.example.futbet.exception.InvalidTokenException;
 import com.example.futbet.mapper.UserMapper;
+import com.example.futbet.repository.RevokedTokenRepository;
 import com.example.futbet.repository.UserRepository;
 import com.example.futbet.security.JwtService;
 import com.example.futbet.security.TokenType;
@@ -19,23 +21,27 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RevokedTokenRepository revokedTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserMapper userMapper;
 
     public AuthService(
             UserRepository userRepository,
+            RevokedTokenRepository revokedTokenRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             UserMapper userMapper
     ) {
         this.userRepository = userRepository;
+        this.revokedTokenRepository = revokedTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userMapper = userMapper;
@@ -77,7 +83,7 @@ public class AuthService {
         return buildAuthResponse(user);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse refresh(RefreshTokenRequest request) {
         Claims claims;
         try {
@@ -86,12 +92,62 @@ public class AuthService {
             throw new InvalidTokenException();
         }
 
+        if (isRevoked(claims)) {
+            throw new InvalidTokenException();
+        }
+
         UUID publicId = UUID.fromString(claims.getSubject());
         User user = userRepository.findByPublicId(publicId)
                 .filter(User::isActive)
                 .orElseThrow(InvalidTokenException::new);
 
+        // Rotação: o refresh token apresentado é revogado e um novo par é emitido. Impede o
+        // reuso de um token antigo (inclusive vazado) depois que ele já foi trocado.
+        revoke(claims);
+
         return buildAuthResponse(user);
+    }
+
+    /**
+     * Logout: revoga o refresh token informado (entra na denylist). Lenient — se o token for
+     * inválido/expirado, não há o que revogar e a operação é tratada como sucesso (idempotente).
+     */
+    @Transactional
+    public void logout(RefreshTokenRequest request) {
+        Claims claims;
+        try {
+            claims = jwtService.parse(request.refreshToken(), TokenType.REFRESH);
+        } catch (JwtException | IllegalArgumentException ex) {
+            return;
+        }
+        revoke(claims);
+    }
+
+    private boolean isRevoked(Claims claims) {
+        String jti = claims.getId();
+        return jti != null && revokedTokenRepository.existsByJti(UUID.fromString(jti));
+    }
+
+    private void revoke(Claims claims) {
+        String jti = claims.getId();
+        if (jti == null) {
+            return; // tokens antigos (pré-jti) não são revogáveis; expiram naturalmente
+        }
+        UUID jtiUuid = UUID.fromString(jti);
+        if (revokedTokenRepository.existsByJti(jtiUuid)) {
+            return;
+        }
+        UUID userPublicId = claims.getSubject() != null ? UUID.fromString(claims.getSubject()) : null;
+        Instant expiresAt = claims.getExpiration() != null
+                ? claims.getExpiration().toInstant()
+                : Instant.now();
+        revokedTokenRepository.save(
+                RevokedToken.builder()
+                        .jti(jtiUuid)
+                        .userPublicId(userPublicId)
+                        .expiresAt(expiresAt)
+                        .build()
+        );
     }
 
     private AuthResponse buildAuthResponse(User user) {

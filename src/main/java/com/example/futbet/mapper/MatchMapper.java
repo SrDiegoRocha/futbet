@@ -18,23 +18,28 @@ public class MatchMapper {
                 group != null ? group.getName() : null,
                 match.getRound(),
                 match.getTieId(),
+                match.getMatchType(),
                 toTeamRef(match.getHomeTeam()),
                 toTeamRef(match.getAwayTeam()),
                 match.getScheduledAt(),
                 match.getHomeScore(),
                 match.getAwayScore(),
+                match.getHomePenalties(),
+                match.getAwayPenalties(),
                 match.getStatus(),
                 match.getCreatedAt(),
                 match.getUpdatedAt()
         );
     }
 
-    private MatchResponse.TeamRef toTeamRef(Team team) {
+    public MatchResponse.TeamRef toTeamRef(Team team) {
         return new MatchResponse.TeamRef(
                 team.getPublicId(),
                 team.getName(),
                 team.getShortName(),
-                team.getBadgeUrl()
+                team.getBadgeUrl(),
+                team.getPrimaryColor(),
+                team.getSecondaryColor()
         );
     }
 }

@@ -71,11 +71,6 @@ public class PhaseService {
                 .phaseType(request.phaseType())
                 .matchLegMode(request.matchLegMode())
                 .matchGenerationMode(request.matchGenerationMode())
-                .qualifiersPerGroup(
-                        request.phaseType() == TournamentPhaseType.GROUPS
-                                ? request.qualifiersPerGroup()
-                                : null
-                )
                 .playsInsideGroupOnly(
                         request.phaseType() == TournamentPhaseType.GROUPS
                                 ? request.playsInsideGroupOnly()
@@ -128,11 +123,6 @@ public class PhaseService {
         phase.setPhaseType(request.phaseType());
         phase.setMatchLegMode(request.matchLegMode());
         phase.setMatchGenerationMode(request.matchGenerationMode());
-        phase.setQualifiersPerGroup(
-                request.phaseType() == TournamentPhaseType.GROUPS
-                        ? request.qualifiersPerGroup()
-                        : null
-        );
         phase.setPlaysInsideGroupOnly(
                 request.phaseType() == TournamentPhaseType.GROUPS
                         ? request.playsInsideGroupOnly()

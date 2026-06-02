@@ -1,5 +1,6 @@
 package com.example.futbet.dto.request;
 
+import com.example.futbet.enums.MatchType;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
 
@@ -11,6 +12,7 @@ public record UpdateMatchRequest(
         @NotNull UUID awayTeamId,
         @NotNull @PositiveOrZero Integer round,
         UUID groupId,
-        Instant scheduledAt
+        Instant scheduledAt,
+        MatchType matchType   // opcional; default REGULAR. THIRD_PLACE só em KNOCKOUT.
 ) {
 }

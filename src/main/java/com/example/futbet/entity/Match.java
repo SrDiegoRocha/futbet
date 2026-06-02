@@ -1,6 +1,7 @@
 package com.example.futbet.entity;
 
 import com.example.futbet.enums.MatchStatus;
+import com.example.futbet.enums.MatchType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -70,9 +71,19 @@ public class Match {
     @Column(name = "away_score")
     private Integer awayScore;
 
+    @Column(name = "home_penalties")
+    private Integer homePenalties;
+
+    @Column(name = "away_penalties")
+    private Integer awayPenalties;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)
     private MatchStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "match_type", nullable = false, length = 15)
+    private MatchType matchType;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -90,6 +101,9 @@ public class Match {
         }
         if (status == null) {
             status = MatchStatus.SCHEDULED;
+        }
+        if (matchType == null) {
+            matchType = MatchType.REGULAR;
         }
         Instant now = Instant.now();
         createdAt = now;

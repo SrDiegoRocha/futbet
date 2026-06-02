@@ -11,6 +11,7 @@ import com.example.futbet.entity.Team;
 import com.example.futbet.entity.Tournament;
 import com.example.futbet.entity.TournamentPhase;
 import com.example.futbet.enums.MatchStatus;
+import com.example.futbet.enums.MatchType;
 import com.example.futbet.enums.TournamentPhaseType;
 import com.example.futbet.enums.TournamentStatus;
 import com.example.futbet.exception.InvalidMatchException;
@@ -42,6 +43,7 @@ public class MatchService {
     private final MatchRepository matchRepository;
     private final MatchMapper mapper;
     private final PredictionService predictionService;
+    private final TournamentAccessGuard accessGuard;
 
     public MatchService(
             TournamentRepository tournamentRepository,
@@ -50,7 +52,8 @@ public class MatchService {
             PhaseTeamRepository phaseTeamRepository,
             MatchRepository matchRepository,
             MatchMapper mapper,
-            PredictionService predictionService
+            PredictionService predictionService,
+            TournamentAccessGuard accessGuard
     ) {
         this.tournamentRepository = tournamentRepository;
         this.phaseRepository = phaseRepository;
@@ -59,6 +62,7 @@ public class MatchService {
         this.matchRepository = matchRepository;
         this.mapper = mapper;
         this.predictionService = predictionService;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional
@@ -98,17 +102,20 @@ public class MatchService {
                 .awayTeam(away.getTeam())
                 .scheduledAt(request.scheduledAt())
                 .status(MatchStatus.SCHEDULED)
+                .matchType(resolveMatchType(phase, request.matchType()))
                 .build();
         return mapper.toResponse(matchRepository.save(match));
     }
 
     @Transactional(readOnly = true)
     public List<MatchResponse> list(
+            UUID requesterPublicId,
             UUID tournamentPublicId,
             UUID phasePublicId,
             Integer round,
             UUID groupId
     ) {
+        accessGuard.requireViewable(requesterPublicId, tournamentPublicId);
         List<Match> matches;
         if (round != null) {
             matches = matchRepository.findAllByPhasePublicIdAndRound(phasePublicId, round);
@@ -121,7 +128,22 @@ public class MatchService {
     }
 
     @Transactional(readOnly = true)
-    public MatchResponse getById(UUID tournamentPublicId, UUID phasePublicId, UUID matchPublicId) {
+    public List<MatchResponse> listByTournament(UUID requesterPublicId, UUID tournamentPublicId) {
+        accessGuard.requireViewable(requesterPublicId, tournamentPublicId);
+        return matchRepository.findAllByTournamentPublicIdOrdered(tournamentPublicId)
+                .stream()
+                .map(mapper::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MatchResponse getById(
+            UUID requesterPublicId,
+            UUID tournamentPublicId,
+            UUID phasePublicId,
+            UUID matchPublicId
+    ) {
+        accessGuard.requireViewable(requesterPublicId, tournamentPublicId);
         Match match = matchRepository.findByPublicIdAndPhasePublicId(matchPublicId, phasePublicId)
                 .orElseThrow(MatchNotFoundException::new);
         return mapper.toResponse(match);
@@ -160,6 +182,7 @@ public class MatchService {
         match.setHomeTeam(home.getTeam());
         match.setAwayTeam(away.getTeam());
         match.setScheduledAt(request.scheduledAt());
+        match.setMatchType(resolveMatchType(phase, request.matchType()));
 
         return mapper.toResponse(matchRepository.saveAndFlush(match));
     }
@@ -184,12 +207,9 @@ public class MatchService {
         if (match.getStatus() == MatchStatus.CANCELLED) {
             throw new MatchResultNotAllowedException("Cannot set result on a cancelled match");
         }
-        if (match.getScheduledAt() == null) {
-            throw new MatchResultNotAllowedException(
-                    "Match has no scheduled time; set it before lançar result"
-            );
-        }
-        if (java.time.Instant.now().isBefore(match.getScheduledAt())) {
+        // Com horário marcado, o resultado só pode entrar após o deadline de palpites (scheduledAt).
+        // Sem horário marcado, pode lançar a qualquer momento — lançar o resultado é o que trava os palpites.
+        if (match.getScheduledAt() != null && java.time.Instant.now().isBefore(match.getScheduledAt())) {
             throw new MatchResultNotAllowedException(
                     "Results can only be set after the prediction deadline (scheduledAt)"
             );
@@ -197,6 +217,7 @@ public class MatchService {
 
         match.setHomeScore(request.homeScore());
         match.setAwayScore(request.awayScore());
+        applyPenalties(phase, match, request);
         match.setStatus(MatchStatus.COMPLETED);
         Match saved = matchRepository.saveAndFlush(match);
         predictionService.recalculatePointsFor(saved);
@@ -217,6 +238,8 @@ public class MatchService {
         match.setStatus(MatchStatus.CANCELLED);
         match.setHomeScore(null);
         match.setAwayScore(null);
+        match.setHomePenalties(null);
+        match.setAwayPenalties(null);
         predictionService.zeroPointsFor(match);
         return mapper.toResponse(matchRepository.saveAndFlush(match));
     }
@@ -295,6 +318,35 @@ public class MatchService {
             throw new InvalidMatchException("groupId only applies to GROUPS phase");
         }
         return null;
+    }
+
+    private MatchType resolveMatchType(TournamentPhase phase, MatchType requested) {
+        MatchType type = requested != null ? requested : MatchType.REGULAR;
+        if (type == MatchType.THIRD_PLACE && phase.getPhaseType() != TournamentPhaseType.KNOCKOUT) {
+            throw new InvalidMatchException("THIRD_PLACE matches are only allowed in KNOCKOUT phases");
+        }
+        return type;
+    }
+
+    private void applyPenalties(TournamentPhase phase, Match match, SetMatchResultRequest request) {
+        Integer hp = request.homePenalties();
+        Integer ap = request.awayPenalties();
+        if (hp == null && ap == null) {
+            match.setHomePenalties(null);
+            match.setAwayPenalties(null);
+            return;
+        }
+        if (hp == null || ap == null) {
+            throw new InvalidMatchException("Both penalty scores must be provided together");
+        }
+        if (phase.getPhaseType() != TournamentPhaseType.KNOCKOUT) {
+            throw new InvalidMatchException("Penalties only apply to KNOCKOUT phases");
+        }
+        if (hp.equals(ap)) {
+            throw new InvalidMatchException("Penalty shootout cannot end in a draw");
+        }
+        match.setHomePenalties(hp);
+        match.setAwayPenalties(ap);
     }
 
     private void ensureTeamFreeInRound(

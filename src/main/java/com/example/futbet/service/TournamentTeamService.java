@@ -17,14 +17,33 @@ import com.example.futbet.repository.TeamRepository;
 import com.example.futbet.repository.TournamentRepository;
 import com.example.futbet.repository.TournamentTeamRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class TournamentTeamService {
+
+    /**
+     * Os campos expostos no {@code TournamentTeamResponse} pertencem ao {@code Team} aninhado,
+     * não ao {@code TournamentTeam} que é a entidade paginada. Este mapa traduz o nome que o
+     * cliente envia (ex.: {@code name}) para o caminho real na entidade (ex.: {@code team.name}),
+     * evitando {@code PropertyReferenceException} ao montar a ordenação.
+     */
+    private static final Map<String, String> SORT_PROPERTY_MAPPING = Map.of(
+            "teamId", "team.publicId",
+            "name", "team.name",
+            "shortName", "team.shortName",
+            "badgeUrl", "team.badgeUrl",
+            "primaryColor", "team.primaryColor",
+            "secondaryColor", "team.secondaryColor",
+            "addedAt", "addedAt"
+    );
 
     private final TournamentRepository tournamentRepository;
     private final TournamentTeamRepository tournamentTeamRepository;
@@ -83,8 +102,22 @@ public class TournamentTeamService {
         if (!tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId).isPresent()) {
             throw new TournamentNotFoundException();
         }
-        return tournamentTeamRepository.findAllByTournamentPublicId(tournamentPublicId, pageable)
+        return tournamentTeamRepository.findAllByTournamentPublicId(tournamentPublicId, remapSort(pageable))
                 .map(mapper::toResponse);
+    }
+
+    private Pageable remapSort(Pageable pageable) {
+        if (pageable.getSort().isUnsorted()) {
+            return pageable;
+        }
+        Sort mappedSort = Sort.by(
+                pageable.getSort().stream()
+                        .map(order -> order.withProperty(
+                                SORT_PROPERTY_MAPPING.getOrDefault(order.getProperty(), order.getProperty())
+                        ))
+                        .toList()
+        );
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), mappedSort);
     }
 
     private Tournament loadOwnedEditable(UUID ownerPublicId, UUID tournamentPublicId) {

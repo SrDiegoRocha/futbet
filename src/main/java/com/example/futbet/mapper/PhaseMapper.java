@@ -15,11 +15,11 @@ public class PhaseMapper {
                 phase.getPhaseType(),
                 phase.getMatchLegMode(),
                 phase.getMatchGenerationMode(),
-                phase.getQualifiersPerGroup(),
                 phase.getPlaysInsideGroupOnly(),
                 phase.isHasThirdPlace(),
                 groupCount,
                 teamCount,
+                phase.getFinalizedAt(),
                 phase.getCreatedAt(),
                 phase.getUpdatedAt()
         );

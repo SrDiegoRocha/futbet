@@ -46,6 +46,7 @@ public class TournamentService {
     private final UserRepository userRepository;
     private final InviteCodeGenerator inviteCodeGenerator;
     private final TournamentMapper tournamentMapper;
+    private final TournamentAccessGuard accessGuard;
 
     public TournamentService(
             TournamentRepository tournamentRepository,
@@ -53,7 +54,8 @@ public class TournamentService {
             TournamentTeamRepository teamRepository,
             UserRepository userRepository,
             InviteCodeGenerator inviteCodeGenerator,
-            TournamentMapper tournamentMapper
+            TournamentMapper tournamentMapper,
+            TournamentAccessGuard accessGuard
     ) {
         this.tournamentRepository = tournamentRepository;
         this.memberRepository = memberRepository;
@@ -61,6 +63,7 @@ public class TournamentService {
         this.userRepository = userRepository;
         this.inviteCodeGenerator = inviteCodeGenerator;
         this.tournamentMapper = tournamentMapper;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional
@@ -99,18 +102,7 @@ public class TournamentService {
 
     @Transactional(readOnly = true)
     public TournamentResponse getById(UUID requesterPublicId, UUID tournamentPublicId) {
-        Tournament tournament = loadActive(tournamentPublicId);
-        boolean isOwner = tournament.getOwner().getPublicId().equals(requesterPublicId);
-        boolean isMember = memberRepository
-                .findByTournamentPublicIdAndUserPublicId(tournamentPublicId, requesterPublicId)
-                .isPresent();
-        boolean isPublic = tournament.getPrivacy() == TournamentPrivacy.PUBLIC
-                && tournament.getStatus() != TournamentStatus.DRAFT;
-
-        if (!isOwner && !isMember && !isPublic) {
-            throw new TournamentNotFoundException();
-        }
-        return toResponse(tournament);
+        return toResponse(accessGuard.requireViewable(requesterPublicId, tournamentPublicId));
     }
 
     @Transactional(readOnly = true)

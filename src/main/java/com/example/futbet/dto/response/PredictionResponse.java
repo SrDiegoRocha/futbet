@@ -8,9 +8,9 @@ public record PredictionResponse(
         UUID matchId,
         UUID userId,
         String userName,
-        int homeScore,
-        int awayScore,
-        int points,
+        Integer homeScore,
+        Integer awayScore,
+        Integer points,
         Instant createdAt,
         Instant updatedAt
 ) {

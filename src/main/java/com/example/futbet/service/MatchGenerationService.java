@@ -10,6 +10,7 @@ import com.example.futbet.entity.TournamentPhase;
 import com.example.futbet.enums.MatchGenerationMode;
 import com.example.futbet.enums.MatchLegMode;
 import com.example.futbet.enums.MatchStatus;
+import com.example.futbet.enums.MatchType;
 import com.example.futbet.enums.TournamentPhaseType;
 import com.example.futbet.enums.TournamentStatus;
 import com.example.futbet.exception.MatchGenerationException;
@@ -43,6 +44,7 @@ public class MatchGenerationService {
     private final PhaseTeamRepository phaseTeamRepository;
     private final MatchRepository matchRepository;
     private final MatchMapper matchMapper;
+    private final TieAggregateCalculator tieCalculator;
     private final SecureRandom random = new SecureRandom();
 
     public MatchGenerationService(
@@ -51,7 +53,8 @@ public class MatchGenerationService {
             PhaseGroupRepository groupRepository,
             PhaseTeamRepository phaseTeamRepository,
             MatchRepository matchRepository,
-            MatchMapper matchMapper
+            MatchMapper matchMapper,
+            TieAggregateCalculator tieCalculator
     ) {
         this.tournamentRepository = tournamentRepository;
         this.phaseRepository = phaseRepository;
@@ -59,6 +62,7 @@ public class MatchGenerationService {
         this.phaseTeamRepository = phaseTeamRepository;
         this.matchRepository = matchRepository;
         this.matchMapper = matchMapper;
+        this.tieCalculator = tieCalculator;
     }
 
     @Transactional
@@ -170,10 +174,10 @@ public class MatchGenerationService {
                 Team away = rotation.get(n - 1 - i);
                 if (home == null || away == null) continue;
                 UUID tieId = UUID.randomUUID();
-                created.add(persistMatch(phase, group, round, tieId, home, away));
+                created.add(persistMatch(phase, group, round, tieId, home, away, MatchType.REGULAR));
                 if (twoLegged) {
                     int returnRound = firstRound + rounds + r;
-                    created.add(persistMatch(phase, group, returnRound, tieId, away, home));
+                    created.add(persistMatch(phase, group, returnRound, tieId, away, home, MatchType.REGULAR));
                 }
             }
             rotation = rotate(rotation);
@@ -221,9 +225,9 @@ public class MatchGenerationService {
             Team home = teams.get(i);
             Team away = teams.get(n - 1 - i);
             UUID tieId = UUID.randomUUID();
-            created.add(persistMatch(phase, null, homeRound, tieId, home, away));
+            created.add(persistMatch(phase, null, homeRound, tieId, home, away, MatchType.REGULAR));
             if (twoLegged) {
-                created.add(persistMatch(phase, null, returnRound, tieId, away, home));
+                created.add(persistMatch(phase, null, returnRound, tieId, away, home, MatchType.REGULAR));
             }
         }
         return created;
@@ -285,49 +289,27 @@ public class MatchGenerationService {
             Team home = winners.get(i);
             Team away = winners.get(i + 1);
             UUID tieId = UUID.randomUUID();
-            created.add(persistMatch(phase, null, nextHomeRound, tieId, home, away));
+            created.add(persistMatch(phase, null, nextHomeRound, tieId, home, away, MatchType.REGULAR));
             if (twoLegged) {
-                created.add(persistMatch(phase, null, nextReturnRound, tieId, away, home));
+                created.add(persistMatch(phase, null, nextReturnRound, tieId, away, home, MatchType.REGULAR));
             }
         }
         if (isFinalRound && finalLoserA != null && finalLoserB != null) {
             UUID tieId = UUID.randomUUID();
-            created.add(persistMatch(phase, null, nextHomeRound, tieId, finalLoserA, finalLoserB));
+            created.add(persistMatch(phase, null, nextHomeRound, tieId, finalLoserA, finalLoserB, MatchType.THIRD_PLACE));
             if (twoLegged) {
-                created.add(persistMatch(phase, null, nextReturnRound, tieId, finalLoserB, finalLoserA));
+                created.add(persistMatch(phase, null, nextReturnRound, tieId, finalLoserB, finalLoserA, MatchType.THIRD_PLACE));
             }
         }
         return created;
     }
 
     private Team resolveTieWinner(List<Match> legs) {
-        int homeAgg = 0;
-        int awayAgg = 0;
-        Team home = legs.get(0).getHomeTeam();
-        Team away = legs.get(0).getAwayTeam();
-        for (Match m : legs) {
-            if (m.getStatus() != MatchStatus.COMPLETED) continue;
-            int hs = m.getHomeScore() == null ? 0 : m.getHomeScore();
-            int as = m.getAwayScore() == null ? 0 : m.getAwayScore();
-            if (m.getHomeTeam().getId().equals(home.getId())) {
-                homeAgg += hs;
-                awayAgg += as;
-            } else {
-                homeAgg += as;
-                awayAgg += hs;
-            }
-        }
-        if (homeAgg > awayAgg) return home;
-        if (awayAgg > homeAgg) return away;
-        return null;
+        return tieCalculator.compute(legs).winner();
     }
 
     private Team resolveTieLoser(List<Match> legs) {
-        Team winner = resolveTieWinner(legs);
-        if (winner == null) return null;
-        Team home = legs.get(0).getHomeTeam();
-        Team away = legs.get(0).getAwayTeam();
-        return winner.getId().equals(home.getId()) ? away : home;
+        return tieCalculator.loserOf(tieCalculator.compute(legs));
     }
 
     private boolean isPowerOfTwo(int n) {
@@ -340,7 +322,8 @@ public class MatchGenerationService {
             int round,
             UUID tieId,
             Team home,
-            Team away
+            Team away,
+            MatchType matchType
     ) {
         Match match = Match.builder()
                 .phase(phase)
@@ -350,6 +333,7 @@ public class MatchGenerationService {
                 .homeTeam(home)
                 .awayTeam(away)
                 .status(MatchStatus.SCHEDULED)
+                .matchType(matchType)
                 .build();
         return matchRepository.save(match);
     }

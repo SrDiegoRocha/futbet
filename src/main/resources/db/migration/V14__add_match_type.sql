@@ -1,0 +1,2 @@
+ALTER TABLE tournament_matches
+    ADD COLUMN match_type VARCHAR(15) NOT NULL DEFAULT 'REGULAR';

@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 @Service
 public class JwtService {
@@ -62,6 +63,7 @@ public class JwtService {
 
         return Jwts.builder()
                 .issuer(properties.issuer())
+                .id(UUID.randomUUID().toString())   // jti — permite revogação (denylist) de refresh tokens
                 .subject(user.getPublicId().toString())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiresAt))

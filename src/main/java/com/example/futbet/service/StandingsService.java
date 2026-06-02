@@ -8,73 +8,202 @@ import com.example.futbet.entity.Team;
 import com.example.futbet.entity.Tournament;
 import com.example.futbet.entity.TournamentPhase;
 import com.example.futbet.entity.TournamentSettings;
+import com.example.futbet.entity.TournamentZone;
 import com.example.futbet.enums.MatchStatus;
 import com.example.futbet.enums.TiebreakCriteria;
 import com.example.futbet.enums.TournamentPhaseType;
+import com.example.futbet.enums.ZoneSelectionMode;
+import com.example.futbet.exception.InvalidPhaseTypeException;
 import com.example.futbet.exception.PhaseNotFoundException;
-import com.example.futbet.exception.TournamentNotFoundException;
 import com.example.futbet.repository.MatchRepository;
 import com.example.futbet.repository.PhaseGroupRepository;
 import com.example.futbet.repository.PhaseTeamRepository;
 import com.example.futbet.repository.TournamentPhaseRepository;
-import com.example.futbet.repository.TournamentRepository;
+import com.example.futbet.repository.TournamentZoneRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class StandingsService {
 
-    private final TournamentRepository tournamentRepository;
     private final TournamentPhaseRepository phaseRepository;
     private final PhaseGroupRepository groupRepository;
     private final PhaseTeamRepository phaseTeamRepository;
     private final MatchRepository matchRepository;
+    private final TournamentZoneRepository zoneRepository;
+    private final TournamentAccessGuard accessGuard;
 
     public StandingsService(
-            TournamentRepository tournamentRepository,
             TournamentPhaseRepository phaseRepository,
             PhaseGroupRepository groupRepository,
             PhaseTeamRepository phaseTeamRepository,
-            MatchRepository matchRepository
+            MatchRepository matchRepository,
+            TournamentZoneRepository zoneRepository,
+            TournamentAccessGuard accessGuard
     ) {
-        this.tournamentRepository = tournamentRepository;
         this.phaseRepository = phaseRepository;
         this.groupRepository = groupRepository;
         this.phaseTeamRepository = phaseTeamRepository;
         this.matchRepository = matchRepository;
+        this.zoneRepository = zoneRepository;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional(readOnly = true)
-    public StandingsResponse compute(UUID tournamentPublicId, UUID phasePublicId) {
-        Tournament tournament = tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId)
-                .orElseThrow(TournamentNotFoundException::new);
+    public StandingsResponse compute(UUID requesterPublicId, UUID tournamentPublicId, UUID phasePublicId) {
+        Tournament tournament = accessGuard.requireViewable(requesterPublicId, tournamentPublicId);
         TournamentPhase phase = phaseRepository
                 .findByPublicIdAndTournamentPublicId(phasePublicId, tournamentPublicId)
                 .orElseThrow(PhaseNotFoundException::new);
+        if (phase.getPhaseType() == TournamentPhaseType.KNOCKOUT) {
+            throw new InvalidPhaseTypeException(
+                    "Standings are not available for KNOCKOUT phases; use /bracket"
+            );
+        }
+        return computeFor(tournament, phasePublicId);
+    }
 
-        List<StandingsResponse.GroupStandings> groups = new ArrayList<>();
+    /**
+     * Cálculo da classificação sem checagem de visibilidade nem de tipo de fase. Para uso interno
+     * por quem já validou o acesso (ex.: {@link PhaseFinalizeService}, que é owner-only). O endpoint
+     * público passa por {@link #compute}, que aplica o {@link TournamentAccessGuard} e bloqueia
+     * fases KNOCKOUT.
+     */
+    StandingsResponse computeFor(Tournament tournament, UUID phasePublicId) {
+        TournamentPhase phase = phaseRepository
+                .findByPublicIdAndTournamentPublicId(phasePublicId, tournament.getPublicId())
+                .orElseThrow(PhaseNotFoundException::new);
 
+        // 1. Calcula a tabela ordenada de cada grupo (ou bloco único em ROUND_ROBIN).
+        List<GroupTable> tables = new ArrayList<>();
         if (phase.getPhaseType() == TournamentPhaseType.GROUPS) {
             List<PhaseGroup> phaseGroups = groupRepository
                     .findAllByPhasePublicIdOrderByPositionAsc(phasePublicId);
             for (PhaseGroup group : phaseGroups) {
-                groups.add(computeGroupStandings(tournament, phase, group));
+                tables.add(new GroupTable(group, orderedTable(tournament, phase, group)));
             }
         } else {
-            groups.add(computeGroupStandings(tournament, phase, null));
+            tables.add(new GroupTable(null, orderedTable(tournament, phase, null)));
+        }
+
+        // 2. Resolve as zonas: por posição (ALL) e os classificados de cada zona BEST_RANKED.
+        List<TournamentZone> zones = zoneRepository.findAllByPhaseIdOrderByPositionAsc(phase.getId());
+        Set<Long> bestRankedQualifiers = bestRankedQualifiers(tables, zones);
+
+        // 3. Monta as linhas já com o desfecho de zona.
+        List<StandingsResponse.GroupStandings> groups = new ArrayList<>(tables.size());
+        for (GroupTable t : tables) {
+            List<StandingsResponse.StandingRow> rows = new ArrayList<>(t.accumulators().size());
+            for (int i = 0; i < t.accumulators().size(); i++) {
+                StandingAccumulator a = t.accumulators().get(i);
+                int position = i + 1;
+                rows.add(buildRow(a, position, zoneForPosition(zones, position), bestRankedQualifiers));
+            }
+            groups.add(new StandingsResponse.GroupStandings(
+                    t.group() != null ? t.group().getPublicId() : null,
+                    t.group() != null ? t.group().getName() : null,
+                    rows
+            ));
         }
 
         return new StandingsResponse(phasePublicId, groups);
     }
 
-    StandingsResponse.GroupStandings computeGroupStandings(
+    private StandingsResponse.StandingRow buildRow(
+            StandingAccumulator a,
+            int position,
+            TournamentZone zone,
+            Set<Long> bestRankedQualifiers
+    ) {
+        UUID zoneId = null;
+        String zoneName = null;
+        UUID nextPhaseId = null;
+        String nextPhaseName = null;
+        boolean qualifies = false;
+
+        if (zone != null) {
+            zoneId = zone.getPublicId();
+            zoneName = zone.getName();
+            if (zone.getNextPhase() != null) {
+                nextPhaseId = zone.getNextPhase().getPublicId();
+                nextPhaseName = zone.getNextPhase().getName();
+                qualifies = zone.getSelectionMode() == ZoneSelectionMode.BEST_RANKED
+                        ? bestRankedQualifiers.contains(a.team.getId())
+                        : true;
+            }
+        }
+
+        return new StandingsResponse.StandingRow(
+                position,
+                a.team.getPublicId(),
+                a.team.getName(),
+                a.team.getShortName(),
+                a.team.getBadgeUrl(),
+                a.played, a.wins, a.draws, a.losses,
+                a.goalsFor, a.goalsAgainst,
+                a.goalsFor - a.goalsAgainst,
+                a.points,
+                zoneId, zoneName, nextPhaseId, nextPhaseName, qualifies
+        );
+    }
+
+    /** Zona cuja faixa de posições cobre {@code position}. Zonas não se sobrepõem (validado). */
+    private TournamentZone zoneForPosition(List<TournamentZone> zones, int position) {
+        for (TournamentZone z : zones) {
+            if (position >= z.getFromPosition() && position <= z.getToPosition()) {
+                return z;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * IDs (internos) dos times que se classificam pelas zonas BEST_RANKED. Para cada zona desse tipo,
+     * junta os times da posição-alvo de todos os grupos, ranqueia entre si com o mesmo critério do
+     * {@code finalize} (pontos → vitórias → saldo → gols pró → menos derrotas → nome) e pega os
+     * {@code bestRankedCount} melhores. Provisório enquanto a fase não terminou.
+     */
+    private Set<Long> bestRankedQualifiers(List<GroupTable> tables, List<TournamentZone> zones) {
+        Set<Long> qualifiers = new HashSet<>();
+        for (TournamentZone zone : zones) {
+            if (zone.getSelectionMode() != ZoneSelectionMode.BEST_RANKED
+                    || zone.getNextPhase() == null
+                    || zone.getBestRankedCount() == null) {
+                continue;
+            }
+            int index = zone.getFromPosition() - 1; // from == to em BEST_RANKED
+            List<StandingAccumulator> candidates = new ArrayList<>();
+            for (GroupTable t : tables) {
+                if (index >= 0 && index < t.accumulators().size()) {
+                    candidates.add(t.accumulators().get(index));
+                }
+            }
+            candidates.sort(
+                    Comparator.comparingInt((StandingAccumulator s) -> s.points).reversed()
+                            .thenComparing(Comparator.comparingInt((StandingAccumulator s) -> s.wins).reversed())
+                            .thenComparing(Comparator.comparingInt(
+                                    (StandingAccumulator s) -> s.goalsFor - s.goalsAgainst).reversed())
+                            .thenComparing(Comparator.comparingInt((StandingAccumulator s) -> s.goalsFor).reversed())
+                            .thenComparing(Comparator.comparingInt((StandingAccumulator s) -> s.losses))
+                            .thenComparing((a, b) -> a.team.getName().compareToIgnoreCase(b.team.getName()))
+            );
+            candidates.stream()
+                    .limit(zone.getBestRankedCount())
+                    .forEach(c -> qualifiers.add(c.team.getId()));
+        }
+        return qualifiers;
+    }
+
+    private List<StandingAccumulator> orderedTable(
             Tournament tournament,
             TournamentPhase phase,
             PhaseGroup group
@@ -141,27 +270,7 @@ public class StandingsService {
 
         List<StandingAccumulator> ordered = new ArrayList<>(table.values());
         ordered.sort(buildComparator(tiebreaks, allMatches, group));
-
-        List<StandingsResponse.StandingRow> rows = new ArrayList<>(ordered.size());
-        for (int i = 0; i < ordered.size(); i++) {
-            StandingAccumulator a = ordered.get(i);
-            rows.add(new StandingsResponse.StandingRow(
-                    i + 1,
-                    a.team.getPublicId(),
-                    a.team.getName(),
-                    a.team.getShortName(),
-                    a.team.getBadgeUrl(),
-                    a.played, a.wins, a.draws, a.losses,
-                    a.goalsFor, a.goalsAgainst,
-                    a.goalsFor - a.goalsAgainst,
-                    a.points
-            ));
-        }
-        return new StandingsResponse.GroupStandings(
-                group != null ? group.getPublicId() : null,
-                group != null ? group.getName() : null,
-                rows
-        );
+        return ordered;
     }
 
     Comparator<StandingAccumulator> buildComparator(
@@ -229,5 +338,9 @@ public class StandingsService {
         StandingAccumulator(Team team) {
             this.team = team;
         }
+    }
+
+    /** Tabela ordenada de um grupo (ou bloco único em ROUND_ROBIN, com {@code group == null}). */
+    private record GroupTable(PhaseGroup group, List<StandingAccumulator> accumulators) {
     }
 }

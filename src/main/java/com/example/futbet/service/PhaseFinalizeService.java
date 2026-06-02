@@ -10,6 +10,7 @@ import com.example.futbet.entity.TournamentZone;
 import com.example.futbet.enums.MatchStatus;
 import com.example.futbet.enums.TournamentPhaseType;
 import com.example.futbet.enums.ZoneSelectionMode;
+import com.example.futbet.exception.NotTournamentOwnerException;
 import com.example.futbet.exception.PhaseFinalizeException;
 import com.example.futbet.exception.PhaseNotFoundException;
 import com.example.futbet.exception.TournamentNotFoundException;
@@ -23,6 +24,7 @@ import com.example.futbet.repository.TournamentZoneRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -65,16 +67,19 @@ public class PhaseFinalizeService {
     }
 
     @Transactional
-    public StandingsResponse finalize(UUID tournamentPublicId, UUID phasePublicId) {
+    public StandingsResponse finalize(UUID ownerPublicId, UUID tournamentPublicId, UUID phasePublicId) {
         Tournament tournament = tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId)
                 .orElseThrow(TournamentNotFoundException::new);
+        if (!tournament.getOwner().getPublicId().equals(ownerPublicId)) {
+            throw new NotTournamentOwnerException();
+        }
         TournamentPhase phase = phaseRepository
                 .findByPublicIdAndTournamentPublicId(phasePublicId, tournamentPublicId)
                 .orElseThrow(PhaseNotFoundException::new);
 
         ensureAllMatchesResolved(phase);
 
-        StandingsResponse standings = standingsService.compute(tournamentPublicId, phasePublicId);
+        StandingsResponse standings = standingsService.computeFor(tournament, phasePublicId);
         List<TournamentZone> zones = zoneRepository.findAllByPhaseIdOrderByPositionAsc(phase.getId());
 
         Set<UUID> alreadySeededPhases = new HashSet<>();
@@ -98,6 +103,9 @@ public class PhaseFinalizeService {
 
             promoteTeams(zone.getNextPhase(), teamsToPromote);
         }
+
+        phase.setFinalizedAt(Instant.now());
+        phaseRepository.save(phase);
 
         return standings;
     }

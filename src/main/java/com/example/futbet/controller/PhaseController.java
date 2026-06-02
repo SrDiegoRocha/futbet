@@ -3,8 +3,10 @@ package com.example.futbet.controller;
 import com.example.futbet.dto.request.CreatePhaseRequest;
 import com.example.futbet.dto.request.MovePhaseRequest;
 import com.example.futbet.dto.request.UpdatePhaseRequest;
+import com.example.futbet.dto.response.BracketResponse;
 import com.example.futbet.dto.response.PhaseResponse;
 import com.example.futbet.dto.response.StandingsResponse;
+import com.example.futbet.service.BracketService;
 import com.example.futbet.service.PhaseFinalizeService;
 import com.example.futbet.service.PhaseService;
 import com.example.futbet.service.StandingsService;
@@ -30,15 +32,18 @@ public class PhaseController {
 
     private final PhaseService phaseService;
     private final StandingsService standingsService;
+    private final BracketService bracketService;
     private final PhaseFinalizeService finalizeService;
 
     public PhaseController(
             PhaseService phaseService,
             StandingsService standingsService,
+            BracketService bracketService,
             PhaseFinalizeService finalizeService
     ) {
         this.phaseService = phaseService;
         this.standingsService = standingsService;
+        this.bracketService = bracketService;
         this.finalizeService = finalizeService;
     }
 
@@ -105,10 +110,24 @@ public class PhaseController {
 
     @GetMapping("/{phaseId}/standings")
     public ResponseEntity<StandingsResponse> standings(
+            @AuthenticationPrincipal String requesterPublicId,
             @PathVariable UUID tournamentId,
             @PathVariable UUID phaseId
     ) {
-        return ResponseEntity.ok(standingsService.compute(tournamentId, phaseId));
+        return ResponseEntity.ok(
+                standingsService.compute(UUID.fromString(requesterPublicId), tournamentId, phaseId)
+        );
+    }
+
+    @GetMapping("/{phaseId}/bracket")
+    public ResponseEntity<BracketResponse> bracket(
+            @AuthenticationPrincipal String requesterPublicId,
+            @PathVariable UUID tournamentId,
+            @PathVariable UUID phaseId
+    ) {
+        return ResponseEntity.ok(
+                bracketService.compute(UUID.fromString(requesterPublicId), tournamentId, phaseId)
+        );
     }
 
     @PostMapping("/{phaseId}/finalize")
@@ -117,6 +136,8 @@ public class PhaseController {
             @PathVariable UUID tournamentId,
             @PathVariable UUID phaseId
     ) {
-        return ResponseEntity.ok(finalizeService.finalize(tournamentId, phaseId));
+        return ResponseEntity.ok(
+                finalizeService.finalize(UUID.fromString(ownerPublicId), tournamentId, phaseId)
+        );
     }
 }

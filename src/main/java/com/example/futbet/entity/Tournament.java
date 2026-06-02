@@ -56,7 +56,7 @@ public class Tournament {
     @Column(length = 500)
     private String description;
 
-    @Column(name = "invite_code", nullable = false, unique = true, length = 8)
+    @Column(name = "invite_code", nullable = false, unique = true, length = 6)
     private String inviteCode;
 
     @Enumerated(EnumType.STRING)

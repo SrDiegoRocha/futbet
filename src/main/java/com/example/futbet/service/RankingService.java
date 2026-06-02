@@ -3,13 +3,9 @@ package com.example.futbet.service;
 import com.example.futbet.dto.response.RankingRowResponse;
 import com.example.futbet.entity.Match;
 import com.example.futbet.entity.Prediction;
-import com.example.futbet.entity.Tournament;
-import com.example.futbet.entity.TournamentSettings;
 import com.example.futbet.entity.User;
 import com.example.futbet.enums.MatchStatus;
-import com.example.futbet.exception.TournamentNotFoundException;
 import com.example.futbet.repository.PredictionRepository;
-import com.example.futbet.repository.TournamentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,22 +19,20 @@ import java.util.UUID;
 @Service
 public class RankingService {
 
-    private final TournamentRepository tournamentRepository;
     private final PredictionRepository predictionRepository;
+    private final TournamentAccessGuard accessGuard;
 
     public RankingService(
-            TournamentRepository tournamentRepository,
-            PredictionRepository predictionRepository
+            PredictionRepository predictionRepository,
+            TournamentAccessGuard accessGuard
     ) {
-        this.tournamentRepository = tournamentRepository;
         this.predictionRepository = predictionRepository;
+        this.accessGuard = accessGuard;
     }
 
     @Transactional(readOnly = true)
-    public List<RankingRowResponse> compute(UUID tournamentPublicId) {
-        Tournament tournament = tournamentRepository.findByPublicIdAndActiveTrue(tournamentPublicId)
-                .orElseThrow(TournamentNotFoundException::new);
-        TournamentSettings settings = tournament.getSettings();
+    public List<RankingRowResponse> compute(UUID requesterPublicId, UUID tournamentPublicId) {
+        accessGuard.requireViewable(requesterPublicId, tournamentPublicId);
 
         List<Prediction> predictions = predictionRepository.findAllByTournamentPublicId(tournamentPublicId);
 

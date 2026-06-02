@@ -2,6 +2,7 @@ package com.example.futbet.service;
 
 import com.example.futbet.dto.request.PlacePredictionRequest;
 import com.example.futbet.dto.response.PredictionResponse;
+import com.example.futbet.dto.response.PredictionStatsResponse;
 import com.example.futbet.entity.Match;
 import com.example.futbet.entity.Prediction;
 import com.example.futbet.entity.Tournament;
@@ -67,16 +68,7 @@ public class PredictionService {
         ensureActiveMember(tournament, userPublicId);
 
         Match match = loadMatchInTournament(tournament, matchPublicId);
-
-        if (match.getStatus() == MatchStatus.CANCELLED) {
-            throw new PredictionLockedException("Match is cancelled");
-        }
-        if (match.getScheduledAt() == null) {
-            throw new PredictionLockedException("Match has no scheduled time");
-        }
-        if (!Instant.now().isBefore(match.getScheduledAt())) {
-            throw new PredictionLockedException("Predictions are locked for this match");
-        }
+        ensurePredictionsOpen(match);
 
         User user = userRepository.findByPublicId(userPublicId)
                 .orElseThrow(TournamentNotFoundException::new);
@@ -114,6 +106,30 @@ public class PredictionService {
                 .toList();
     }
 
+    /**
+     * Palpites de um participante arbitrário no torneio inteiro. Diferente de {@link #listMine}
+     * (os meus, sempre visíveis), aqui cada palpite é redigido conforme a janela da sua partida —
+     * placares/pontos só aparecem quando já podem ser revelados (após `scheduledAt`, ou após o
+     * resultado quando não há data). Acesso: owner ou member ACTIVE. Usuário sem palpites → `[]`.
+     */
+    @Transactional(readOnly = true)
+    public List<PredictionResponse> listForUserInTournament(
+            UUID requesterPublicId,
+            UUID tournamentPublicId,
+            UUID targetUserPublicId
+    ) {
+        Tournament tournament = loadTournament(tournamentPublicId);
+        boolean isOwner = tournament.getOwner().getPublicId().equals(requesterPublicId);
+        if (!isOwner) {
+            ensureActiveMember(tournament, requesterPublicId);
+        }
+        return predictionRepository
+                .findAllByTournamentPublicIdAndUserPublicId(tournamentPublicId, targetUserPublicId)
+                .stream()
+                .map(p -> mapper.toResponse(p, canRevealPredictionScores(p.getMatch())))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<PredictionResponse> listForMatch(
             UUID requesterPublicId,
@@ -127,17 +143,88 @@ public class PredictionService {
         }
         Match match = loadMatchInTournament(tournament, matchPublicId);
 
-        if (!isOwner) {
-            if (match.getScheduledAt() == null || Instant.now().isBefore(match.getScheduledAt())) {
-                throw new PredictionLockedException(
-                        "Predictions become visible only after the match deadline"
-                );
-            }
-        }
+        boolean revealScores = canRevealPredictionScores(match);
         return predictionRepository.findAllByMatchPublicId(matchPublicId)
                 .stream()
-                .map(mapper::toResponse)
+                .map(p -> mapper.toResponse(p, revealScores))
                 .toList();
+    }
+
+    /**
+     * Distribuição agregada dos palpites do match (mandante/empate/visitante), sem expor palpites
+     * individuais. Nunca falha por janela de tempo — pode ser chamado a qualquer momento. Acesso:
+     * owner ou member ACTIVE (mesma regra do listing).
+     */
+    @Transactional(readOnly = true)
+    public PredictionStatsResponse stats(
+            UUID requesterPublicId,
+            UUID tournamentPublicId,
+            UUID matchPublicId
+    ) {
+        Tournament tournament = loadTournament(tournamentPublicId);
+        boolean isOwner = tournament.getOwner().getPublicId().equals(requesterPublicId);
+        if (!isOwner) {
+            ensureActiveMember(tournament, requesterPublicId);
+        }
+        loadMatchInTournament(tournament, matchPublicId); // 404 se o match não for deste torneio
+
+        long homeWin = 0;
+        long draw = 0;
+        long awayWin = 0;
+        for (Prediction p : predictionRepository.findAllByMatchPublicId(matchPublicId)) {
+            int cmp = Integer.compare(p.getHomeScore(), p.getAwayScore());
+            if (cmp > 0) {
+                homeWin++;
+            } else if (cmp < 0) {
+                awayWin++;
+            } else {
+                draw++;
+            }
+        }
+        long total = homeWin + draw + awayWin;
+        int[] pct = roundedPercentages(total, new long[]{homeWin, draw, awayWin});
+        return new PredictionStatsResponse(total, homeWin, draw, awayWin, pct[0], pct[1], pct[2]);
+    }
+
+    /**
+     * Converte contagens em percentuais inteiros que somam exatamente 100 (método do maior resto).
+     * {@code total <= 0} → tudo zero.
+     */
+    private int[] roundedPercentages(long total, long[] counts) {
+        int n = counts.length;
+        int[] result = new int[n];
+        if (total <= 0) {
+            return result;
+        }
+        double[] remainder = new double[n];
+        int assigned = 0;
+        for (int i = 0; i < n; i++) {
+            double exact = counts[i] * 100.0 / total;
+            result[i] = (int) Math.floor(exact);
+            remainder[i] = exact - result[i];
+            assigned += result[i];
+        }
+        int leftover = 100 - assigned;
+        for (int k = 0; k < leftover; k++) {
+            int best = 0;
+            double bestRemainder = -1;
+            for (int i = 0; i < n; i++) {
+                if (remainder[i] > bestRemainder) {
+                    bestRemainder = remainder[i];
+                    best = i;
+                }
+            }
+            result[best]++;
+            remainder[best] = -1; // não escolher o mesmo bucket de novo
+        }
+        return result;
+    }
+
+    private boolean canRevealPredictionScores(Match match) {
+        if (match.getScheduledAt() != null) {
+            return !Instant.now().isBefore(match.getScheduledAt());
+        }
+        return match.getStatus() == MatchStatus.COMPLETED;
     }
 
     @Transactional
@@ -145,13 +232,36 @@ public class PredictionService {
         Tournament tournament = loadTournament(tournamentPublicId);
         ensureActiveMember(tournament, userPublicId);
         Match match = loadMatchInTournament(tournament, matchPublicId);
-        if (match.getScheduledAt() != null && !Instant.now().isBefore(match.getScheduledAt())) {
-            throw new PredictionLockedException("Predictions are locked for this match");
-        }
+        ensurePredictionsOpen(match);
         Prediction prediction = predictionRepository
                 .findByMatchPublicIdAndUserPublicId(matchPublicId, userPublicId)
                 .orElseThrow(PredictionNotFoundException::new);
         predictionRepository.delete(prediction);
+    }
+
+    /**
+     * Janela de palpite. Dois modos, conforme a partida tenha ou não horário definido:
+     * <ul>
+     *   <li><b>Com {@code scheduledAt}</b>: aceita palpite até o horário marcado; depois trava
+     *       (o jogo começou). O resultado real só pode ser lançado após esse horário.</li>
+     *   <li><b>Sem {@code scheduledAt}</b>: aceita palpite até o resultado real ser lançado
+     *       (match vira {@code COMPLETED}); a partir daí trava.</li>
+     * </ul>
+     * Partida {@code CANCELLED} nunca aceita palpite.
+     */
+    private void ensurePredictionsOpen(Match match) {
+        if (match.getStatus() == MatchStatus.CANCELLED) {
+            throw new PredictionLockedException("Match is cancelled");
+        }
+        if (match.getScheduledAt() != null) {
+            if (!Instant.now().isBefore(match.getScheduledAt())) {
+                throw new PredictionLockedException("Predictions are locked for this match");
+            }
+        } else if (match.getStatus() == MatchStatus.COMPLETED) {
+            throw new PredictionLockedException(
+                    "Predictions are locked: the match result has already been set"
+            );
+        }
     }
 
     @Transactional
