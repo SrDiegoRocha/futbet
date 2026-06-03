@@ -1,0 +1,12 @@
+target/
+.git/
+.github/
+.idea/
+*.iml
+.claude/
+.mvn/
+mvnw
+mvnw.cmd
+HELP.md
+*.md
+docker-compose.yml

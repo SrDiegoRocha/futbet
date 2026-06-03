@@ -1,0 +1,18 @@
+package com.example.reidopitaco.dto.request;
+
+import com.example.reidopitaco.enums.MatchGenerationMode;
+import com.example.reidopitaco.enums.MatchLegMode;
+import com.example.reidopitaco.enums.TournamentPhaseType;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+public record UpdatePhaseRequest(
+        @NotBlank @Size(min = 1, max = 60) String name,
+        @NotNull TournamentPhaseType phaseType,
+        @NotNull MatchLegMode matchLegMode,
+        @NotNull MatchGenerationMode matchGenerationMode,
+        Boolean playsInsideGroupOnly,
+        Boolean hasThirdPlace
+) {
+}

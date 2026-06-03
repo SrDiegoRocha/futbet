@@ -37,7 +37,8 @@
       "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 30)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o clean compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 30)",
       "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o clean compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 20)",
-      "WebFetch(domain:www.dicebear.com)"
+      "WebFetch(domain:www.dicebear.com)",
+      "PowerShell($env:JAVA_HOME = \"C:\\\\Users\\\\diego\\\\.jdks\\\\corretto-21.0.10\"; .\\\\mvnw.cmd -o test-compile 2>&1 | Select-String \"ERROR|BUILD\" | Select-Object -First 20)"
     ]
   }
 }
