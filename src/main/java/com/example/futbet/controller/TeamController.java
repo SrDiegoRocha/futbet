@@ -3,6 +3,8 @@ package com.example.futbet.controller;
 import com.example.futbet.dto.request.CreateTeamRequest;
 import com.example.futbet.dto.request.UpdateTeamRequest;
 import com.example.futbet.dto.response.TeamResponse;
+import com.example.futbet.enums.TeamScope;
+import com.example.futbet.enums.TeamType;
 import com.example.futbet.service.TeamService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -44,9 +47,11 @@ public class TeamController {
     @GetMapping
     public ResponseEntity<Page<TeamResponse>> list(
             @AuthenticationPrincipal String ownerPublicId,
+            @RequestParam(required = false) TeamScope scope,
+            @RequestParam(required = false) TeamType type,
             @PageableDefault(size = 20) Pageable pageable
     ) {
-        return ResponseEntity.ok(teamService.list(UUID.fromString(ownerPublicId), pageable));
+        return ResponseEntity.ok(teamService.list(UUID.fromString(ownerPublicId), scope, type, pageable));
     }
 
     @GetMapping("/{id}")

@@ -1,5 +1,7 @@
 package com.example.futbet.dto.response;
 
+import com.example.futbet.enums.TeamType;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -20,6 +22,8 @@ public record StandingsResponse(
             String teamName,
             String shortName,
             String badgeUrl,
+            TeamType teamType,
+            String countryCode,
             int played,
             int wins,
             int draws,

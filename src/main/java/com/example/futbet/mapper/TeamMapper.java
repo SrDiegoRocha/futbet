@@ -15,6 +15,9 @@ public class TeamMapper {
                 team.getBadgeUrl(),
                 team.getPrimaryColor(),
                 team.getSecondaryColor(),
+                team.isSystem(),
+                team.getTeamType(),
+                team.getCountryCode(),
                 team.getCreatedAt(),
                 team.getUpdatedAt()
         );

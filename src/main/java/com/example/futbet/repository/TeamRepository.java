@@ -1,9 +1,12 @@
 package com.example.futbet.repository;
 
 import com.example.futbet.entity.Team;
+import com.example.futbet.enums.TeamType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -16,5 +19,27 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
 
     Optional<Team> findByPublicIdAndOwnerPublicIdAndActiveTrue(UUID publicId, UUID ownerPublicId);
 
+    Optional<Team> findByPublicIdAndActiveTrue(UUID publicId);
+
     boolean existsByOwnerPublicIdAndNameIgnoreCaseAndActiveTrue(UUID ownerPublicId, String name);
+
+    /**
+     * Busca times ativos por escopo: os do próprio usuário ({@code includeMine}) e/ou os do sistema
+     * ({@code includeSystem}), opcionalmente filtrando por {@code type} (null = qualquer tipo).
+     */
+    @Query("""
+            SELECT t FROM Team t
+            LEFT JOIN t.owner o
+            WHERE t.active = true
+              AND ( (:includeMine = true AND o.publicId = :ownerPublicId)
+                    OR (:includeSystem = true AND t.system = true) )
+              AND (:type IS NULL OR t.teamType = :type)
+            """)
+    Page<Team> search(
+            @Param("includeMine") boolean includeMine,
+            @Param("includeSystem") boolean includeSystem,
+            @Param("ownerPublicId") UUID ownerPublicId,
+            @Param("type") TeamType type,
+            Pageable pageable
+    );
 }

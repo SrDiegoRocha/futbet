@@ -59,7 +59,6 @@ public class AuthService {
                 .name(request.name().trim())
                 .email(normalizedEmail)
                 .password(passwordEncoder.encode(request.password()))
-                .avatarUrl(request.avatarUrl())
                 .role(Role.USER)
                 .build();
 

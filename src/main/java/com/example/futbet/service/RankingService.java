@@ -21,13 +21,16 @@ public class RankingService {
 
     private final PredictionRepository predictionRepository;
     private final TournamentAccessGuard accessGuard;
+    private final AvatarService avatarService;
 
     public RankingService(
             PredictionRepository predictionRepository,
-            TournamentAccessGuard accessGuard
+            TournamentAccessGuard accessGuard,
+            AvatarService avatarService
     ) {
         this.predictionRepository = predictionRepository;
         this.accessGuard = accessGuard;
+        this.avatarService = avatarService;
     }
 
     @Transactional(readOnly = true)
@@ -75,7 +78,7 @@ public class RankingService {
                     i + 1,
                     a.user.getPublicId(),
                     a.user.getName(),
-                    a.user.getAvatarUrl(),
+                    avatarService.avatarUrlFor(a.user.getName()),
                     a.totalPoints,
                     a.exactScoreHits,
                     a.winnerHits,

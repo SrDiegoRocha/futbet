@@ -39,7 +39,9 @@ public class MatchMapper {
                 team.getShortName(),
                 team.getBadgeUrl(),
                 team.getPrimaryColor(),
-                team.getSecondaryColor()
+                team.getSecondaryColor(),
+                team.getTeamType(),
+                team.getCountryCode()
         );
     }
 }

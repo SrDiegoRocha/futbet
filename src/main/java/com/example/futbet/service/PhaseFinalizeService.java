@@ -167,11 +167,10 @@ public class PhaseFinalizeService {
         if (teamPublicIds.isEmpty()) {
             return;
         }
+        // Resolve por publicId sem escopar por dono — o time pode ser do dono OU do sistema (sem dono).
         Map<UUID, Team> teamsByPublicId = new HashMap<>();
         for (UUID pid : teamPublicIds) {
-            Team team = teamRepository.findByPublicIdAndOwnerPublicIdAndActiveTrue(
-                            pid, nextPhase.getTournament().getOwner().getPublicId()
-                    )
+            Team team = teamRepository.findByPublicIdAndActiveTrue(pid)
                     .orElseThrow(() -> new PhaseFinalizeException("Team " + pid + " could not be resolved"));
             teamsByPublicId.put(pid, team);
         }

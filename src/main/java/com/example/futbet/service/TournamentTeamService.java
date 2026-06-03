@@ -66,9 +66,14 @@ public class TournamentTeamService {
     public TournamentTeamResponse link(UUID ownerPublicId, UUID tournamentPublicId, UUID teamPublicId) {
         Tournament tournament = loadOwnedEditable(ownerPublicId, tournamentPublicId);
 
-        Team team = teamRepository
-                .findByPublicIdAndOwnerPublicIdAndActiveTrue(teamPublicId, ownerPublicId)
-                .orElseThrow(TeamNotOwnedException::new);
+        // Vincula time próprio do dono OU um time padrão do sistema (sem dono).
+        Team team = teamRepository.findByPublicIdAndActiveTrue(teamPublicId)
+                .orElseThrow(TeamNotFoundException::new);
+        boolean ownedByCaller = team.getOwner() != null
+                && team.getOwner().getPublicId().equals(ownerPublicId);
+        if (!team.isSystem() && !ownedByCaller) {
+            throw new TeamNotOwnedException();
+        }
 
         if (tournamentTeamRepository.existsByTournamentPublicIdAndTeamPublicId(tournamentPublicId, teamPublicId)) {
             throw new TeamAlreadyInTournamentException();

@@ -2,6 +2,7 @@ package com.example.futbet.dto.response;
 
 import com.example.futbet.enums.MatchStatus;
 import com.example.futbet.enums.MatchType;
+import com.example.futbet.enums.TeamType;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -31,7 +32,9 @@ public record MatchResponse(
             String shortName,
             String badgeUrl,
             String primaryColor,
-            String secondaryColor
+            String secondaryColor,
+            TeamType teamType,       // CLUB | NATIONAL_TEAM
+            String countryCode       // flagicons (ex. "br"); preenchido nas seleções, senão null
     ) {
     }
 }

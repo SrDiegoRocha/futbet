@@ -148,6 +148,8 @@ public class StandingsService {
                 a.team.getName(),
                 a.team.getShortName(),
                 a.team.getBadgeUrl(),
+                a.team.getTeamType(),
+                a.team.getCountryCode(),
                 a.played, a.wins, a.draws, a.losses,
                 a.goalsFor, a.goalsAgainst,
                 a.goalsFor - a.goalsAgainst,

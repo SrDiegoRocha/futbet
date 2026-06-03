@@ -1,7 +1,10 @@
 package com.example.futbet.entity;
 
+import com.example.futbet.enums.TeamType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -36,8 +39,9 @@ public class Team {
     @Column(name = "public_id", nullable = false, unique = true, updatable = false)
     private UUID publicId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "owner_id", nullable = false, updatable = false)
+    // Nullable: times padrão do sistema (system = true) não têm dono.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_id", updatable = false)
     private User owner;
 
     @Column(nullable = false, length = 80)
@@ -55,6 +59,18 @@ public class Team {
     @Column(name = "secondary_color", nullable = false, length = 7)
     private String secondaryColor;
 
+    // Time padrão do sistema: visível a todos, não editável/deletável pelo usuário.
+    @Column(name = "is_system", nullable = false)
+    private boolean system;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "team_type", nullable = false, length = 20)
+    private TeamType teamType;
+
+    // Código ISO/flagicons (ex.: "br", "gb-eng") para renderizar a bandeira no front; só em seleções.
+    @Column(name = "country_code", length = 10)
+    private String countryCode;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -68,6 +84,9 @@ public class Team {
     void onCreate() {
         if (publicId == null) {
             publicId = UUID.randomUUID();
+        }
+        if (teamType == null) {
+            teamType = TeamType.CLUB;
         }
         Instant now = Instant.now();
         createdAt = now;

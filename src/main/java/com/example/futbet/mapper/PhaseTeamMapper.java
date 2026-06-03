@@ -19,6 +19,8 @@ public class PhaseTeamMapper {
                 team.getBadgeUrl(),
                 team.getPrimaryColor(),
                 team.getSecondaryColor(),
+                team.getTeamType(),
+                team.getCountryCode(),
                 group != null ? group.getPublicId() : null,
                 group != null ? group.getName() : null,
                 phaseTeam.getAddedAt()

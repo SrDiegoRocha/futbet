@@ -17,6 +17,9 @@ public class TournamentTeamMapper {
                 team.getBadgeUrl(),
                 team.getPrimaryColor(),
                 team.getSecondaryColor(),
+                team.isSystem(),
+                team.getTeamType(),
+                team.getCountryCode(),
                 tournamentTeam.getAddedAt()
         );
     }

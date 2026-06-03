@@ -40,7 +40,6 @@ public class UserService {
     public UserResponse updateProfile(UUID publicId, UpdateProfileRequest request) {
         User user = loadActive(publicId);
         user.setName(request.name().trim());
-        user.setAvatarUrl(request.avatarUrl());
         return userMapper.toResponse(userRepository.save(user));
     }
 
