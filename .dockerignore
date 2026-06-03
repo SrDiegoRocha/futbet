@@ -12,4 +12,5 @@ HELP.md
 docker-compose.yml
 docker-compose.selfhost.yml
 .env
+.env.local
 .env.example
